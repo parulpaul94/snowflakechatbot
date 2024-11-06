@@ -16,8 +16,6 @@ def get_base64_of_bin_file(bin_file):
 img_file = 'omnia-logo.png'
 img_base64 = get_base64_of_bin_file(img_file)
 
-
-
 # Set wide layout for Streamlit app
 st.set_page_config(layout="wide")
 
@@ -114,34 +112,8 @@ def validate_sql(sql):
             return False, keyword
     return True, None
 
-# def get_audio():
-#     recognizer = sr.Recognizer()
-
-#     # Use the microphone as the audio source
-#     with sr.Microphone() as source:
-#         st.write("Listening... Please speak after a few seconds.")
-#         recognizer.adjust_for_ambient_noise(source)
-
-#         try:
-#             audio = recognizer.listen(source, timeout=3)  
-#             st.write("Recognizing...")
-#             text = recognizer.recognize_google(audio)
-#             st.write("You said: ", text)
-#             return text  
-
-#         except sr.WaitTimeoutError:
-#             st.write("Listening timed out while waiting for phrase to start")
-#             return "No speech detected"
-
-#         except sr.UnknownValueError:
-#             st.write("Google Web Speech API could not understand audio")
-#             return "Could not understand audio"
-
-#         except sr.RequestError as e:
-#             st.write(f"Could not request results from Google Web Speech API; {e}")
-#             return "API error"
-
 def main():
+    # Reset session state if 'openai_key_entered' or 'question' is not defined
     if 'openai_key_entered' not in st.session_state:
         st.session_state.openai_key_entered = False
     if 'question' not in st.session_state:
@@ -151,7 +123,6 @@ def main():
 
     # Sidebar for Settings and Input
     with st.sidebar:
-        #st.title("Settings")
         st.image("omnia-logo.png", use_column_width=True)
         st.title("Please fill the details: ")
         option = st.selectbox("Choose an option", ["Snowflake Credentials", "OpenAI API Key"], index=1)
@@ -171,79 +142,81 @@ def main():
             api_key = st.text_input("OpenAI API Key", type="password")
             if api_key:
                 os.environ["OPENAI_API_KEY"] = api_key
-                # st.success("OpenAI API Key entered successfully.")
                 st.session_state.openai_key_entered = True
 
-        if api_key or st.session_state.openai_key_entered:
-            st.session_state.question = st.text_area(
-                "Hi! I’m Omni, your data assistant. Ask me anything about your connected data!",
-                value=st.session_state.question,
-                placeholder="What is the total revenue?",
-                height=100,
-            )
-            # st.markdown('<div class="centered-button">', unsafe_allow_html=True)
-            # if st.button("🎤 Query by voice"):
-            #     speech_input = get_audio()  
-            #     if speech_input:
-            #         st.session_state.question = speech_input
-            # st.markdown('</div>', unsafe_allow_html=True)
-
-        if st.session_state.question:
-            question = st.session_state.question
-
-            # Initialize SnowflakeDB to avoid errors before querying table schemas
+    # Main Content
+    if st.session_state.openai_key_entered:
+        # Ensure the Snowflake connection is active
+        if 'sf' not in st.session_state:
             if all(env_var in os.environ for env_var in ["SNOWFLAKE_USER", "SNOWFLAKE_PASSWORD"]):
-                sf = SnowflakeDB()
+                st.session_state.sf = SnowflakeDB()  # Store the SnowflakeDB instance in session state
             else:
-                st.warning("Please provide Snowflake credentials in the sidebar.")
-                st.stop()
+                st.stop()  # Stop if credentials are missing
 
-            
-    if not os.getenv("OPENAI_API_KEY"):
-        st.error("Please provide a valid OpenAI API key.")
-        st.stop()
-
-    # Ensure Snowflake credentials are entered and connection is made
-    if all(env_var in os.environ for env_var in ["SNOWFLAKE_USER", "SNOWFLAKE_PASSWORD"]):
-        sf = SnowflakeDB()
-    else:
-        st.warning("Please provide Snowflake credentials in the sidebar.")
-        st.stop()
-
-    question = st.session_state.question.strip()
-
-    if question:
-        st.title("Snowflake-Streamlit Integration")
-        st.write("Connect to your Snowflake database and ask questions about your data in real-time.")
-        
-        table_schemas = get_tables_schema(sf.conn)
-
-        prompt = read_prompt_file("sql_prompt.txt")
-        prompt = prompt.replace("<<TABLES>>", table_schemas)
-        prompt = prompt.replace("<<QUESTION>>", question)
-        answer = ask(prompt).replace("```sql", "").replace("```", "").strip()
-
-        is_valid, keyword = validate_sql(answer)
-        if not is_valid:
-            st.error(f"Operation not allowed: {keyword} is restricted!")
+        # Ensure OpenAI API key is set
+        if not os.getenv("OPENAI_API_KEY"):
+            st.error("Please provide a valid OpenAI API key.")
             st.stop()
 
-        st.code(answer)
-        df = query(sf.conn, answer)
-        if df is not None:
-            st.dataframe(df, use_container_width=True)
+        sf = st.session_state.sf  # Retrieve the Snowflake connection from session state
+        
+        # Show the title for the main content
+        st.title("Snowflake-Streamlit Integration")
+        st.write("Connect to your Snowflake database and ask questions about your data in real-time.")
 
-        python_question = st.text_input("Ask a question about the result", placeholder="e.g. Visualize the data")
-        if python_question:
-            df_info = str(df.head())
+        # Show the assistant message above the question input section
+        st.write("**Assistant:** Hi! I’m Omni, your data assistant. Ask me anything about your connected data!")
 
-            prompt = read_prompt_file("python_prompt.txt")
-            prompt = prompt.replace("<<DATAFRAME>>", df_info)
-            prompt = prompt.replace("<<QUESTION>>", python_question)
-            code_answer = ask(prompt).replace("```python", "").replace("```", "").strip()
-            with st.expander("View generated code"):
-                st.code(code_answer)
-            exec(code_answer)
+        # Show the question input section
+        user_input = st.text_area(
+            "Ask a question about the data...",
+            height=100,
+            placeholder="What is the total revenue?",
+        )
+
+        if user_input:
+            # Generate the assistant's response
+            table_schemas = get_tables_schema(sf.conn)
+            prompt = read_prompt_file("sql_prompt.txt")
+            prompt = prompt.replace("<<TABLES>>", table_schemas)
+            prompt = prompt.replace("<<QUESTION>>", user_input)
+            assistant_response = ask(prompt).replace("```sql", "").replace("```", "").strip()
+
+            # Show assistant's answer once
+            st.write(f"**Assistant:** {assistant_response}")
+
+            # If the response is valid, execute the query only once and display the results
+            if assistant_response:
+                is_valid, keyword = validate_sql(assistant_response)
+                if is_valid:
+                    # Execute the query only once and display the results
+                    df = query(sf.conn, assistant_response)
+                    if df is not None:
+                        st.dataframe(df, use_container_width=True)
+
+                    # Display the query code once
+                    # st.code(assistant_response)
+
+                else:
+                    st.error(f"Operation not allowed: {keyword} is restricted!")
+                    st.stop()
+
+                # Ask for additional questions regarding the result
+                python_question = st.text_input("Ask a question about the result", placeholder="e.g. Visualize the data")
+                if python_question:
+                    df_info = str(df.head())
+
+                    prompt = read_prompt_file("python_prompt.txt")
+                    prompt = prompt.replace("<<DATAFRAME>>", df_info)
+                    prompt = prompt.replace("<<QUESTION>>", python_question)
+                    code_answer = ask(prompt).replace("```python", "").replace("```", "").strip()
+
+                    with st.expander("View generated code"):
+                        st.code(code_answer)
+                    
+                    # Execute the generated Python code
+                    exec(code_answer)
+
 
 if __name__ == "__main__":
     main()
