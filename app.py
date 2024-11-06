@@ -194,7 +194,7 @@ def main():
                     
                     if df is not None:
                         # Show the query code only once (after execution)
-                        st.code(assistant_response)
+                        # st.code(assistant_response)
 
                         # Display the dataframe once
                         st.dataframe(df, use_container_width=True)
