@@ -195,7 +195,7 @@ def main():
                         st.dataframe(df, use_container_width=True)
 
                     # Display the query code once
-                    # st.code(assistant_response)
+                    st.code(assistant_response)
 
                 else:
                     st.error(f"Operation not allowed: {keyword} is restricted!")
