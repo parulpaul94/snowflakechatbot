@@ -195,7 +195,7 @@ def main():
             if all(env_var in os.environ for env_var in ["SNOWFLAKE_USER", "SNOWFLAKE_PASSWORD"]):
                 sf = SnowflakeDB()
             else:
-                st.warning("Please provide Snowflake credentials in the sidebar.")
+                # st.warning("Please provide Snowflake credentials in the sidebar.")
                 st.stop()
 
             
