@@ -191,11 +191,13 @@ def main():
                 if is_valid:
                     # Execute the query only once and display the results
                     df = query(sf.conn, assistant_response)
+                    
                     if df is not None:
-                        st.dataframe(df, use_container_width=True)
+                        # Show the query code only once (after execution)
+                        st.code(assistant_response)
 
-                    # Display the query code once
-                    st.code(assistant_response)
+                        # Display the dataframe once
+                        st.dataframe(df, use_container_width=True)
 
                 else:
                     st.error(f"Operation not allowed: {keyword} is restricted!")
@@ -216,7 +218,6 @@ def main():
                     
                     # Execute the generated Python code
                     exec(code_answer)
-
 
 if __name__ == "__main__":
     main()
